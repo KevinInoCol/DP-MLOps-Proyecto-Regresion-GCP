@@ -4,14 +4,27 @@
 # VS Code
 .vscode/
 
+# Claude Code (configuracion local de cada maquina)
+.claude/settings.local.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 
-# DotEnv configuration
+# Secretos: NUNCA subir claves de API (usar los .env.example como plantilla)
 .env
+.env.*
+!.env.example
 
-# Entornos virtuales
-venv/
+# Entornos virtuales (se reconstruyen con uv sync / pip install -r requirements.txt)
 .venv/
+venv/
 env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/

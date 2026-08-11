@@ -1,0 +1,588 @@
+eda_task:
+  description: >
+    Usa el CSV Profiler Tool para perfilar el dataset en {dataset_path}.
+    Con base en lo que encuentres, genera un Jupyter Notebook de EDA adaptado
+    a ese dataset específico.
+
+    ESTRUCTURA OBLIGATORIA DEL NOTEBOOK (sigue este orden exacto):
+
+    1. CARGA Y VISION GENERAL:
+       - Imports (pandas, numpy, matplotlib, seaborn, scipy.stats)
+       - pd.set_option('display.max_columns', None)
+       - Cargar el CSV, mostrar shape, head()
+       - Eliminar columnas de ID si existen (ej: Id, index)
+
+    2. ANALISIS DEL TARGET ({target_variable}):
+       - Histograma de la distribución original
+       - Si es continuo y sesgado: graficar np.log(target) y verificar si mejora
+       - Si es categórico: balance de clases con value_counts y barplot
+
+    3. TIPOS DE VARIABLES:
+       - Identificar categóricas: variables tipo object/string
+       - Detectar numéricas disfrazadas de categóricas (ej: MSSubClass es categórica
+         aunque tenga valores numéricos). Convertirlas con astype('O')
+       - Identificar numéricas: todas las que no son categóricas ni target
+       - Imprimir conteo de cada tipo
+
+    4. MISSING VALUES:
+       - Listar variables con NaN, ordenadas por porcentaje descendente
+       - Barplot de porcentaje de missing por variable
+       - Separar en cat_na y num_na (categóricas vs numéricas con missing)
+       - RELACION MISSING vs TARGET: para cada variable con NA, crear variable
+         binaria (1=missing, 0=no missing) y comparar la media del target en
+         ambos grupos con barplot. Esto revela si el missingness es predictivo.
+
+    5. VARIABLES NUMERICAS — subdividiéndolas en:
+
+       5a. VARIABLES TEMPORALES (si existen):
+       - Detectar variables de año (buscar 'Yr', 'Year' en el nombre)
+       - Graficar mediana del target vs cada año
+       - Calcular "años transcurridos" = año_referencia - año_variable
+       - Scatter de años transcurridos vs target para ver tendencia
+
+       5b. VARIABLES DISCRETAS:
+       - Numéricas con menos de 20 valores únicos (excluyendo temporales)
+       - Boxplot + stripplot de cada una vs target
+       - Identificar cuáles muestran relación creciente con el target
+
+       5c. VARIABLES CONTINUAS:
+       - Todas las numéricas que no son discretas ni temporales
+       - Histogramas de distribución
+       - Probar transformación Yeo-Johnson y graficar antes/después
+       - Probar transformación log para variables sin ceros
+       - Scatter de variable original vs log(target) y transformada vs log(target)
+
+       5d. VARIABLES SESGADAS / DOMINADAS POR CEROS:
+       - Variables con mas del 50% de valores en cero
+       - Binarizar (0 vs no-0) y comparar media del target en cada grupo
+       - Evaluar si la binarización aporta información predictiva
+
+    6. VARIABLES CATEGORICAS:
+
+       6a. CARDINALIDAD:
+       - Barplot con numero de categorías únicas por variable
+       - Identificar si hay alta cardinalidad (pocas variables suelen tenerla)
+
+       6b. VARIABLES ORDINALES DE CALIDAD (si existen):
+       - Identificar variables que representan calidades o condiciones
+         (ej: Excellent, Good, Typical, Fair, Poor o escalas similares)
+       - Definir mappings numéricos para cada grupo ordinal
+       - Boxplot de cada variable mapeada vs target
+
+       6c. RARE LABELS:
+       - Para cada categórica nominal, mostrar categorías con menos del 1%
+         de frecuencia
+       - Estas son candidatas a agruparse como "Rare" en feature engineering
+
+       6d. CATEGORICAS NOMINALES vs TARGET:
+       - Boxplot + stripplot de cada variable categórica nominal vs target
+
+    7. CONCLUSIONES (esta sección es el input para el siguiente agente):
+       - Variables que necesitan imputación (separar cat y num)
+       - Variables temporales detectadas y variable de referencia
+       - Variables continuas candidatas a log y a Yeo-Johnson
+       - Variables sesgadas candidatas a binarización
+       - Variables ordinales y sus mappings sugeridos
+       - Variables con rare labels candidatas a RareLabelEncoder
+       - Variables a eliminar (si las hay)
+
+    Al terminar, usa el Notebook Writer Tool para guardar el notebook en:
+    {output_folder}/01-EDA.ipynb
+    IMPORTANTE: El código debe funcionar para este dataset específico, con los
+    nombres de columnas reales que encontraste con el profiler.
+  expected_output: >
+    Confirmación de que el Notebook Writer Tool guardó exitosamente el archivo
+    {output_folder}/01-EDA.ipynb con análisis completo.
+  agent: data_analyst
+
+feature_engineering_task:
+  description: >
+    Basándote en las conclusiones del EDA sobre {dataset_path}, genera un
+    Jupyter Notebook de Feature Engineering en Python puro que aplique solo
+    las transformaciones que ese dataset necesita.
+
+    Reglas generales a seguir (adapta según lo que encontró el EDA):
+    - Separar train/test PRIMERO (80/20 o 90/10 según tamaño del dataset, random_state=0)
+    - Imputar categóricas: NaN → "Missing" para variables con missingness alto;
+      moda para variables con missingness bajo (<5%)
+    - Imputar numéricas: media + crear columna indicadora de missingness
+    - Variables temporales (años): transformar a "años transcurridos" desde año de referencia
+    - Variables numéricas con skew > 0.75: aplicar log1p o Yeo-Johnson según distribución
+    - Variables con >50% ceros: considerar binarización
+    - Variables categóricas ordinales (ej: calidades Excelente>Bueno>Regular):
+      aplicar encoding ordinal con mapping basado en el target
+    - Variables categóricas nominales de alta cardinalidad: RareLabelEncoder + OrdinalEncoder
+    - Escalar todo con MinMaxScaler al final
+    - Verificar que no quedan NaN ni infinitos en train y test
+
+    Al terminar, usa el Notebook Writer Tool para guardar el notebook en:
+    {output_folder}/02-Feature-Engineering.ipynb
+    IMPORTANTE: Usa los nombres de columna reales del dataset. No hardcodees
+    transformaciones que no aplican a este dataset.
+  expected_output: >
+    Confirmación de que el Notebook Writer Tool guardó exitosamente el archivo
+    {output_folder}/02-Feature-Engineering.ipynb con todas las transformaciones.
+  agent: feature_engineer
+
+pipeline_task:
+  description: >
+    Construye un Pipeline de sklearn reproducible para {dataset_path} que
+    encapsule las transformaciones del feature engineering anterior.
+    Ya tienes en tu contexto las conclusiones del feature engineering con
+    las transformaciones aplicadas. Usa esa información directamente,
+    NO necesitas perfilar el dataset de nuevo.
+
+    ESTILO OBLIGATORIO — sigue esta estructura exacta:
+
+    A) CONSTANTES EN MAYUSCULAS al inicio del notebook, una por tipo de variable:
+       CATEGORICAL_VARS_WITH_NA_MISSING (las que se imputan con "Missing"),
+       CATEGORICAL_VARS_WITH_NA_FREQUENT (las que se imputan con la moda),
+       NUMERICAL_VARS_WITH_NA (las que se imputan con media),
+       TEMPORAL_VARS y REF_VAR (variable de referencia temporal),
+       NUMERICALS_LOG_VARS (candidatas a log), NUMERICALS_YEO_VARS (candidatas a Yeo-Johnson),
+       BINARIZE_VARS (variables con muchos ceros),
+       QUAL_VARS y sus QUAL_MAPPINGS (ordinales de calidad como Po=1,Fa=2,TA=3,Gd=4,Ex=5),
+       EXPOSURE_VARS y EXPOSURE_MAPPINGS (si aplican),
+       CATEGORICAL_VARS (nominales para encoding).
+       Solo incluye las constantes que el dataset necesite.
+
+    B) DOS CUSTOM TRANSFORMERS definidos como clases en el notebook:
+       - TemporalVariableTransformer(BaseEstimator, TransformerMixin):
+         recibe variables y reference_variable en __init__,
+         fit retorna self, transform calcula reference_variable - feature
+       - Mapper(BaseEstimator, TransformerMixin):
+         recibe variables y mappings en __init__,
+         fit retorna self, transform aplica feature.map(mappings)
+
+    C) PIPELINE como sklearn.pipeline.Pipeline con pasos nombrados.
+       Orden obligatorio (solo pasos que apliquen):
+       1-IMPUTATION: CategoricalImputer(missing), CategoricalImputer(frequent),
+         AddMissingIndicator, MeanMedianImputer
+       2-TEMPORAL: TemporalVariableTransformer, DropFeatures(REF_VAR)
+       3-TRANSFORMATION: LogTransformer, YeoJohnsonTransformer,
+         SklearnTransformerWrapper(Binarizer(threshold=0))
+       4-MAPPERS: Mapper para cada grupo de variables ordinales
+       5-ENCODING: RareLabelEncoder(tol=0.01), OrdinalEncoder(encoding_method=ordered)
+
+    CONTENIDO DEL NOTEBOOK (en este orden):
+    1. Imports: pandas, numpy, joblib, train_test_split, MinMaxScaler, Binarizer,
+       Pipeline, BaseEstimator, TransformerMixin, y de feature_engine los que necesites
+    2. Carga del dataset y train_test_split(test_size=0.1, random_state=0)
+    3. Target con np.log (si es continuo)
+    4. Definicion de CONSTANTES
+    5. Definicion de custom transformers
+    6. Construccion del Pipeline
+    7. pipeline.fit(X_train, y_train) — SOLO train, sin data leakage
+    8. X_train_transformed y X_test_transformed
+    9. Verificar que no hay NaN
+    10. joblib.dump(pipeline, '{output_folder}/preprocessors.pkl')
+
+    IMPORTANTE: Usa el Notebook Writer Tool UNA SOLA VEZ al final con todo
+    el contenido completo. Guarda en: {output_folder}/03-Pipeline-sklearn.ipynb
+  expected_output: >
+    Confirmación de que el Notebook Writer Tool guardó exitosamente el archivo
+    {output_folder}/03-Pipeline-sklearn.ipynb con el Pipeline completo.
+  agent: pipeline_builder
+
+feature_selection_task:
+  description: >
+    Aplica selección de features sobre el dataset transformado de {dataset_path}
+    usando Lasso regularizado.
+
+    Pasos del notebook:
+    1. Cargar X_train y X_test transformados (output del pipeline anterior)
+    2. Preparar el target ({target_variable}):
+       - Si es continuo y sesgado: aplicar log1p
+       - Si es categórico binario: dejarlo tal cual para clasificación
+    3. Determinar el tipo de Lasso a usar:
+       - Regresión: sklearn.linear_model.Lasso
+       - Clasificación binaria: sklearn.linear_model.LogisticRegression(penalty='l1')
+    4. Ajustar el modelo con alpha=0.001 (o C=0.5 para clasificación)
+    5. Visualizar coeficientes: barplot horizontal con features vs coeficientes,
+       coloreando en rojo las features eliminadas (coef=0) y en verde las seleccionadas
+    6. Aplicar SelectFromModel para extraer features seleccionadas
+    7. Reporte final:
+       - Nº de features originales
+       - Nº de features seleccionadas
+       - Nº de features eliminadas
+       - Lista de features seleccionadas
+    8. Exportar lista: pd.Series(selected_features).to_csv('{output_folder}/selected_features.csv', index=False)
+
+    Al terminar, usa el Notebook Writer Tool para guardar el notebook en:
+    {output_folder}/04-Feature-Selection.ipynb
+    IMPORTANTE: El alpha del Lasso debe ajustarse según el número de features:
+    con muchas features (>100) usar alpha más alto para mayor regularización.
+  expected_output: >
+    Confirmación de que el Notebook Writer Tool guardó exitosamente el archivo
+    {output_folder}/04-Feature-Selection.ipynb con análisis completo de features.
+  agent: feature_selector
+
+model_selection_task:
+  description: >
+    Genera un Jupyter Notebook que use PyCaret para comparar modelos de ML
+    sobre el dataset {dataset_path} con target {target_variable}.
+
+    Ya tienes en tu contexto las conclusiones del EDA y feature selection.
+    Usa esa información para determinar si es un problema de REGRESION
+    (target continuo) o CLASIFICACION (target categórico/binario).
+
+    CONTENIDO DEL NOTEBOOK (en este orden):
+
+    1. TITULO en markdown: "Seleccion del Mejor Modelo con PyCaret"
+
+    2. IMPORTS Y CARGA:
+       - import pycaret
+       - import pandas as pd
+       - import joblib
+       - Cargar el dataset desde {dataset_path} con pd.read_csv
+
+    3. IMPORT DEL EXPERIMENTO CORRECTO segun tipo de problema:
+       - Si es regresion: from pycaret.regression import RegressionExperiment
+       - Si es clasificacion: from pycaret.classification import ClassificationExperiment
+       Crear la instancia: Experimento = RegressionExperiment() o ClassificationExperiment()
+
+    4. SETUP del experimento:
+       Experimento.setup(data, target='{target_variable}', session_id=123)
+       Agregar markdown explicando que se usa validacion cruzada KFold.
+
+    5. COMPARACION DE MODELOS:
+       MejorModelo = Experimento.compare_models()
+       Imprimir el mejor modelo con print(MejorModelo)
+
+    6. COMPARACION ESPECIFICA (opcional):
+       Seleccionar los top 3 modelos ordenados por la metrica principal
+       (MSE para regresion, Accuracy o F1 para clasificacion):
+       Mejores_TOP3 = Experimento.compare_models(sort='MSE', n_select=3)
+
+    7. TUNING del mejor modelo:
+       MejorModelo_Tuneado = Experimento.tune_model(estimator=MejorModelo, n_iter=10)
+       Agregar markdown explicando los resultados del tuning.
+
+    8. FINALIZAR modelo:
+       Modelo_Final = Experimento.finalize_model(estimator=MejorModelo_Tuneado)
+
+    9. GUARDAR modelo (dos formas):
+       - Experimento.save_model(model=Modelo_Final, model_name='{output_folder}/Modelo_Final_PyCaret')
+       - joblib.dump(MejorModelo_Tuneado, '{output_folder}/modelo_entrenado_solo.pkl')
+
+    10. CARGAR modelo (verificacion):
+        Modelo_Cargado = Experimento.load_model('{output_folder}/Modelo_Final_PyCaret')
+
+    IMPORTANTE: Usa el Notebook Writer Tool UNA SOLA VEZ al final con todo
+    el contenido completo. Guarda en: {output_folder}/05-Best-Model-with-Pycaret.ipynb
+  expected_output: >
+    Confirmación de que el Notebook Writer Tool guardó exitosamente el archivo
+    {output_folder}/05-Best-Model-with-Pycaret.ipynb con el proceso completo
+    de selección de modelos.
+  agent: model_selector
+
+model_training_task:
+  description: >
+    Genera un Jupyter Notebook que entrene el modelo final sobre los datos
+    transformados de {dataset_path} usando las features seleccionadas.
+
+    Ya tienes en tu contexto el output del pipeline (datos transformados)
+    y del feature selector (lista de features seleccionadas). Usa esa
+    información para saber el tipo de problema (regresión o clasificación).
+
+    CONTENIDO DEL NOTEBOOK (en este orden):
+
+    1. TITULO en markdown: "Machine Learning Pipeline - Model Training"
+       Agregar markdown sobre la importancia de fijar el seed para reproducibilidad.
+
+    2. IMPORTS:
+       - pandas, numpy, matplotlib.pyplot, joblib
+       - El modelo adecuado segun tipo de problema:
+         Regresion: from sklearn.linear_model import Lasso
+         Clasificacion: from sklearn.linear_model import LogisticRegression
+       - Metricas adecuadas segun tipo de problema:
+         Regresion: from sklearn.metrics import mean_squared_error, root_mean_squared_error, r2_score
+         Clasificacion: from sklearn.metrics import accuracy_score, f1_score, classification_report
+       - pd.set_option('display.max_columns', None)
+
+    3. CARGAR DATOS TRANSFORMADOS:
+       - X_train y X_test: los DataFrames transformados por el pipeline del
+         notebook 03 (usar los datos que genera el pipeline, no los raw)
+       - y_train y y_test: el target (recordar que si es regresión está en log)
+       - Nota: como el pipeline y los datos se generan en notebooks anteriores,
+         el código debe asumir que los datos transformados están disponibles.
+         Cargarlos desde CSV si fueron guardados, o reconstruir el pipeline
+         y transformar desde el dataset original.
+
+    4. CARGAR FEATURES SELECCIONADAS:
+       - Leer {output_folder}/selected_features.csv
+       - features = pd.read_csv(path)['0'].to_list()
+       - Reducir X_train y X_test a solo esas features:
+         X_train = X_train[features], X_test = X_test[features]
+
+    5. ENTRENAR EL MODELO:
+       - Regresion: Lasso(alpha=0.001, random_state=0)
+       - Clasificacion: LogisticRegression(penalty='l1', solver='saga', random_state=0)
+       - model.fit(X_train, y_train)
+
+    6. EVALUAR CON METRICAS en train y test:
+       Para regresion:
+       - Hacer predicciones en train y test
+       - Calcular MSE, RMSE, R2 usando np.exp() para revertir el log del target
+       - Imprimir: train mse, train rmse, train r2, test mse, test rmse, test r2
+       - Imprimir el precio promedio de las casas como referencia
+       Para clasificacion:
+       - accuracy, f1, classification_report en train y test
+
+    7. SCATTER PREDICCIONES vs REALES:
+       - plt.scatter(y_test, model.predict(X_test))
+       - Ejes: "Precio Real" vs "Precio Predicho" (o "Clase Real" vs "Predicha")
+       - Titulo descriptivo
+
+    8. DISTRIBUCION DE ERRORES (solo regresion):
+       - errors = y_test - predicciones
+       - Histograma de errores (debe ser gaussiano)
+       - Markdown explicando que una distribución gaussiana de errores
+         indica un buen modelo
+
+    9. FEATURE IMPORTANCE:
+       - Barplot horizontal de coeficientes absolutos del modelo
+       - importance = pd.Series(np.abs(model.coef_.ravel()), index=features)
+       - Ordenar descendente y graficar con figsize=(18,6)
+
+    10. GUARDAR MODELO:
+        - joblib.dump(model, '{output_folder}/modelo_final.joblib')
+
+    IMPORTANTE: Usa el Notebook Writer Tool UNA SOLA VEZ al final con todo
+    el contenido completo. Guarda en: {output_folder}/06-Model-Training.ipynb
+  expected_output: >
+    Confirmación de que el Notebook Writer Tool guardó exitosamente el archivo
+    {output_folder}/06-Model-Training.ipynb con el modelo entrenado y evaluado.
+  agent: model_trainer
+
+scoring_task:
+  description: >
+    Genera un Jupyter Notebook que demuestre cómo hacer scoring (predicciones)
+    sobre datos nuevos usando los artefactos generados en los notebooks anteriores.
+
+    Ya tienes en tu contexto las conclusiones del feature engineering, pipeline
+    y modelo entrenado. Usa esa información para saber qué transformaciones
+    se aplicaron y qué artefactos se guardaron.
+
+    CONTENIDO DEL NOTEBOOK (en este orden):
+
+    1. TITULO en markdown: "Machine Learning Pipeline - Scoring New Data"
+       Markdown introductorio: "Imaginemos que un colega del área de negocio
+       nos pide hacer predicciones sobre datos nuevos. Veremos dos formas
+       de hacerlo."
+
+    2. IMPORTS:
+       - pandas, numpy, matplotlib.pyplot, scipy.stats, joblib
+
+    3. CARGAR DATOS NUEVOS:
+       - Cargar un dataset nuevo (puede ser el test.csv del mismo dataset
+         o simular datos nuevos a partir de una muestra)
+       - Mostrar shape y head()
+       - Eliminar columnas de ID si existen
+
+    4. METODO 1 — SCORING MANUAL (Python puro):
+       Markdown explicando que este es el enfoque "a mano".
+       Aplicar CADA transformación del feature engineering paso a paso:
+
+       a) Castear variables categóricas disfrazadas de numéricas
+       b) Imputar categóricas: fillna("Missing") y fillna(moda)
+          NOTA: hay que hardcodear las modas aprendidas del train
+       c) Imputar numéricas: indicador binario + fillna(media)
+          NOTA: hay que hardcodear las medias aprendidas del train
+       d) Variables temporales: calcular años transcurridos, drop año referencia
+       e) Transformaciones: log, Yeo-Johnson (hardcodear lambda), binarizar
+       f) Mappings ordinales: hardcodear diccionarios de calidad
+       g) Rare labels: hardcodear categorías frecuentes por variable
+       h) Encoding ordinal: hardcodear mappings categoría→número
+       i) Verificar NaN restantes, fillna(0) como parche
+       j) Feature scaling: cargar el scaler guardado con joblib
+       k) Seleccionar features: cargar selected_features.csv
+       l) Cargar modelo y predecir
+       m) Visualizar predicciones con histograma
+          Para regresión: aplicar np.exp() para revertir el log
+
+       Cerrar con markdown de PROBLEMAS de este enfoque:
+       - Mucho código repetitivo
+       - Valores hardcodeados que pueden cambiar
+       - Se procesan variables que el modelo no usa
+       - Datos nuevos pueden tener NaN inesperados
+
+    5. METODO 2 — SCORING CON PIPELINE (recomendado):
+       Markdown explicando que el Pipeline resuelve todos los problemas anteriores.
+
+       a) Cargar datos nuevos de nuevo (limpios, sin transformar)
+       b) Castear variables categóricas disfrazadas si aplica
+       c) Cargar el pipeline guardado: joblib.load('{output_folder}/preprocessors.pkl')
+       d) Transformar: data_transformed = pipeline.transform(data_new)
+       e) Cargar features seleccionadas y reducir
+       f) Cargar modelo y predecir
+       g) Visualizar predicciones con histograma
+       h) Markdown destacando: mismo resultado, mucho menos código,
+          sin hardcoding, reproducible y mantenible
+
+    6. CONCLUSIONES en markdown:
+       - El Pipeline encapsula TODAS las transformaciones aprendidas del train
+       - No hay riesgo de olvidar un paso o hardcodear mal un valor
+       - Es la forma recomendada para producción
+
+    IMPORTANTE: Usa el Notebook Writer Tool UNA SOLA VEZ al final con todo
+    el contenido completo. Guarda en: {output_folder}/07-Scoring-new-data.ipynb
+  expected_output: >
+    Confirmación de que el Notebook Writer Tool guardó exitosamente el archivo
+    {output_folder}/07-Scoring-new-data.ipynb con ambos métodos de scoring.
+  agent: scorer
+
+final_pipeline_task:
+  description: >
+    Genera el notebook FINAL que construye un Pipeline end-to-end: preprocesamiento
+    + modelo en UN SOLO objeto sklearn.pipeline.Pipeline deployable.
+
+    Ya tienes en tu contexto toda la información de los agentes anteriores:
+    las transformaciones del feature engineering, la estructura del pipeline,
+    las features seleccionadas, y el modelo entrenado. Usa todo eso para
+    construir el pipeline definitivo.
+
+    DIFERENCIA CLAVE vs notebook 03: Aquel pipeline solo hace preprocesamiento.
+    ESTE pipeline incluye el MODELO como último paso y usa SOLO las features
+    seleccionadas. Es el artefacto final para producción.
+
+    CONTENIDO DEL NOTEBOOK (en este orden):
+
+    1. TITULO en markdown: "Final Machine Learning Pipeline"
+       Listar las características del pipeline:
+       - Usa clases open source (sklearn, feature-engine)
+       - Incluye custom transformers
+       - Solo usa las features seleccionadas
+       - Incluye el modelo entrenado
+       - Puede hacer scoring de datos nuevos directamente
+
+    2. IMPORTS COMPLETOS:
+       - pandas, numpy, matplotlib.pyplot, joblib
+       - sklearn: Lasso (o LogisticRegression), mean_squared_error,
+         root_mean_squared_error, r2_score, train_test_split, Pipeline,
+         MinMaxScaler, Binarizer, BaseEstimator, TransformerMixin
+       - feature_engine: CategoricalImputer, MeanMedianImputer,
+         AddMissingIndicator, LogTransformer, YeoJohnsonTransformer,
+         RareLabelEncoder, OrdinalEncoder, DropFeatures, SklearnTransformerWrapper
+
+    3. CARGAR DATASET y TRAIN/TEST SPLIT:
+       - Cargar desde {dataset_path}
+       - Castear variables categóricas disfrazadas (ej: MSSubClass a str)
+       - train_test_split(test_size=0.1, random_state=0)
+       - Aplicar np.log al target si es regresión
+
+    4. CONFIGURACION — CONSTANTES EN MAYUSCULAS:
+       Definir SOLO las constantes para las features seleccionadas:
+       - FEATURES: lista de features seleccionadas (del notebook 04)
+       - CATEGORICAL_VARS_WITH_NA_MISSING, CATEGORICAL_VARS_WITH_NA_FREQUENT
+       - NUMERICAL_VARS_WITH_NA
+       - TEMPORAL_VARS, REF_VAR, DROP_FEATURES
+       - NUMERICALS_LOG_VARS, NUMERICALS_YEO_VARS, BINARIZE_VARS
+       - QUAL_VARS + QUAL_MAPPINGS, EXPOSURE_VARS + EXPOSURE_MAPPINGS (si aplican)
+       - CATEGORICAL_VARS
+       Solo incluir constantes cuyas variables estén en FEATURES.
+
+    5. REDUCIR a FEATURES seleccionadas:
+       X_train = X_train[FEATURES], X_test = X_test[FEATURES]
+       Asegurar que las categóricas son tipo str.
+
+    6. CUSTOM TRANSFORMERS (si aplican):
+       - TemporalVariableTransformer y Mapper, misma definición que notebook 03
+
+    7. PIPELINE END-TO-END con modelo incluido:
+       Pipeline con pasos nombrados, mismo orden que notebook 03 pero:
+       - Solo los pasos que aplican a las FEATURES seleccionadas
+       - Agregar MinMaxScaler como penúltimo paso
+       - Agregar el MODELO como ULTIMO paso:
+         Regresion: ('lasso', Lasso(alpha=0.001, random_state=0))
+         Clasificacion: ('logistic', LogisticRegression(...))
+
+    8. ENTRENAR: price_pipe.fit(X_train, y_train) — SOLO train
+
+    9. EVALUAR con métricas:
+       - Predicciones: price_pipe.predict(X_train) y price_pipe.predict(X_test)
+       - Regresion: MSE, RMSE, R2 en train y test (usar np.exp para revertir log)
+       - Markdown confirmando que los resultados son iguales al notebook 06
+       - Scatter de predicciones vs valores reales
+       - Histograma de errores (distribución gaussiana)
+
+    10. GUARDAR PIPELINE COMPLETO:
+        joblib.dump(price_pipe, '{output_folder}/pipeline_completo.joblib')
+
+    11. SCORING DATOS NUEVOS:
+        - Cargar datos nuevos (test.csv u otro archivo nuevo)
+        - Castear variables categóricas disfrazadas
+        - Reducir a FEATURES
+        - Detectar NaN inesperados en variables no contempladas por el pipeline
+        - Dropear filas con NaN inesperados (con markdown explicando por qué)
+        - price_pipe.predict(data_new)
+        - Histograma de predicciones (con np.exp si es regresión)
+
+    IMPORTANTE: Usa el Notebook Writer Tool UNA SOLA VEZ al final con todo
+    el contenido completo. Guarda en: {output_folder}/08-Machine-Learning-Pipeline.ipynb
+  expected_output: >
+    Confirmación de que el Notebook Writer Tool guardó exitosamente el archivo
+    {output_folder}/08-Machine-Learning-Pipeline.ipynb con el pipeline
+    end-to-end completo.
+  agent: final_pipeline_builder
+
+code_review_task:
+  description: >
+    Revisa los 8 notebooks generados por los agentes anteriores en {output_folder}.
+    Usa el File Reader Tool para leer cada uno.
+
+    **PASO 0 — ARCHIVOS FALTANTES (PRIORIDAD MÁXIMA):**
+    Antes de revisar errores de contenido, verifica si cada archivo existe usando el
+    File Reader Tool. Si el File Reader Tool devuelve "Error: el archivo ... no existe",
+    DEBES regenerar ese notebook INMEDIATAMENTE con el Notebook Writer Tool usando
+    el output del agente anterior disponible en tu contexto. NO reportes el archivo
+    como error y sigas adelante — genéralo primero, luego revísalo.
+
+    Para CADA notebook, verifica:
+
+    1. **Estructura del .ipynb**: Que el archivo es JSON válido y tiene celdas.
+       Si el archivo NO es JSON válido o está vacío, repórtalo como error crítico
+       y regeneralo usando el contenido del agente anterior en tu contexto.
+
+    2. **Imports completos**: Que cada celda de código que usa una librería tenga
+       su import correspondiente. Imports comunes que suelen faltar:
+       - pandas as pd, numpy as np
+       - matplotlib.pyplot as plt, seaborn as sns
+       - from sklearn.model_selection import train_test_split
+       - from sklearn.preprocessing import MinMaxScaler, Binarizer
+       - from feature_engine.imputation import CategoricalImputer, MeanMedianImputer, AddMissingIndicator
+       - from feature_engine.encoding import RareLabelEncoder, OrdinalEncoder
+       - from feature_engine.transformation import LogTransformer, YeoJohnsonTransformer
+       - from feature_engine.selection import DropFeatures
+       - from feature_engine.wrappers import SklearnTransformerWrapper
+
+    3. **Variables definidas antes de usarse**: Que no se referencie una variable
+       o DataFrame que no fue creada en una celda anterior.
+
+    4. **Ruta del dataset**: Que el notebook cargue el CSV usando la ruta {dataset_path}.
+
+    5. **Sin data leakage**: Que el fit/entrenamiento solo use datos de train.
+
+    6. **Notebook 03 específicamente**: Verifica que el pipeline siga el estilo
+       de referencia. Lee el archivo knowledge/pipeline_reference_style.md con el
+       File Reader Tool para entender el estilo esperado. El pipeline debe:
+       - Ser un sklearn.pipeline.Pipeline con pasos nombrados
+       - Usar CONSTANTES en mayúsculas para las listas de variables
+       - Incluir custom transformers (TemporalVariableTransformer, Mapper) si el dataset tiene variables temporales u ordinales
+       - Seguir el orden: Imputación → Temporal → Transformación → Mappers → Encoding
+
+    Si encuentras errores en algún notebook, usa el Notebook Writer Tool para
+    regenerarlo con las correcciones aplicadas en la misma ruta.
+
+    Al final, genera un reporte con el estado de cada notebook.
+  expected_output: >
+    Reporte de revisión con el estado de cada notebook:
+    - 01-EDA.ipynb: OK o lista de errores encontrados y corregidos
+    - 02-Feature-Engineering.ipynb: OK o lista de errores encontrados y corregidos
+    - 03-Pipeline-sklearn.ipynb: OK o lista de errores encontrados y corregidos
+    - 04-Feature-Selection.ipynb: OK o lista de errores encontrados y corregidos
+    - 05-Best-Model-with-Pycaret.ipynb: OK o lista de errores encontrados y corregidos
+    - 06-Model-Training.ipynb: OK o lista de errores encontrados y corregidos
+    - 07-Scoring-new-data.ipynb: OK o lista de errores encontrados y corregidos
+    - 08-Machine-Learning-Pipeline.ipynb: OK o lista de errores encontrados y corregidos
+  agent: code_reviewer
