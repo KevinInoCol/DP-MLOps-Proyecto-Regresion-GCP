@@ -1,0 +1,17 @@
+# Mac OS-specific storage files
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# DotEnv configuration
+.env
+
+# Entornos virtuales
+venv/
+.venv/
+env/
