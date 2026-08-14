@@ -73,3 +73,25 @@ source .venv/bin/activate
 uv sync
 crewai run
 ```
+
+---
+
+## Alternativa sin uv (con pip)
+
+Si por alguna razón no puedes instalar uv, en esta misma carpeta tienes un `requirements.txt` con las versiones exactas exportadas del `uv.lock`. Necesitas tener **Python 3.10 a 3.13** ya instalado en tu sistema.
+
+```bash
+cd proyecto_multiagentes_para_ml_gemini
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r ../requirements.txt
+pip install -e . --no-deps
+crewai run
+```
+
+Dos detalles de esta ruta:
+
+- El `requirements.txt` está **un nivel arriba**, junto a este archivo, de ahí el `../`.
+- La segunda línea de `pip install` registra el propio proyecto como paquete (lo que `uv sync` hace solo). El flag `--no-deps` evita que pip vuelva a resolver dependencias y rompa los pines del paso anterior.
+
+Es más lento y más frágil que `uv sync`. Úsalo solo como plan B.
